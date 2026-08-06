@@ -92,24 +92,26 @@ def proxy_key(proxy):
 
 
 def load_remote_urls():
-    urls = []
+    remote_file = SOURCES_DIR / "remote.yaml"
 
-    for file in SOURCES_DIR.glob("*.yaml"):
-        try:
-            with file.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
+    if not remote_file.exists():
+        return []
 
-            if isinstance(data, dict):
-                file_urls = data.get("urls", [])
+    try:
+        with remote_file.open(
+            "r",
+            encoding="utf-8"
+        ) as f:
+            data = yaml.safe_load(f)
 
-                if isinstance(file_urls, list):
-                    print(f"URL source: {file.name} -> {len(file_urls)}")
-                    urls.extend(file_urls)
+        if isinstance(data, dict):
+            return data.get("urls", [])
 
-        except Exception as e:
-            print(f"URL LOAD ERROR {file}: {e}")
+    except Exception as e:
+        print("REMOTE YAML ERROR:", e)
 
-    return urls
+    return []
+
 
 def parse_vless_text(text, source):
     result = []

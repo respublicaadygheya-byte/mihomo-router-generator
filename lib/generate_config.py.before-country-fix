@@ -5,7 +5,7 @@ import re
 import yaml
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-AVAILABLE_FILE = BASE_DIR / "cache" / "filtered" / "top_quality_v3.json"
+AVAILABLE_FILE = BASE_DIR / "cache" / "filtered" / "available.json"
 OUTPUT_CONFIG = BASE_DIR / "config" / "generated.yaml"
 
 RULES_DIR = BASE_DIR / "config" / "rules"
@@ -21,6 +21,7 @@ GROUP_PROXY = "🚀 PROXY"
 GROUP_FOREIGN = "🌐 FOREIGN"
 GROUP_FOREIGN_AUTO = "🌐 FOREIGN-AUTO"
 
+GROUP_RUSSIA = "🇷🇺 RUSSIA"
 
 RULE_PRIVATE = "DIRECT"
 
@@ -161,10 +162,19 @@ def make_unique_proxy_names(proxies):
 def is_ru_node(proxy: dict) -> bool:
     role = str(proxy.get("role", "")).lower()
 
+    if role == "foreign":
+        return False
+
     if role == "ru":
         return True
 
-    return False
+    country_code = str(proxy.get("country_code", "")).upper()
+    country = str(proxy.get("country", "")).lower()
+
+    return (
+        country_code == "RU"
+        or country == "russia"
+    )
 
 def generate_mihomo_config():
     if not AVAILABLE_FILE.exists():
@@ -250,6 +260,17 @@ def generate_mihomo_config():
     })
 
 
+    russia_proxies = (
+        ru_names
+        if ru_names
+        else ["DIRECT"]
+    )
+
+    groups.append({
+        "name": GROUP_RUSSIA,
+        "type": "select",
+        "proxies": russia_proxies
+    })
 
 
     if own_names:
@@ -267,6 +288,7 @@ def generate_mihomo_config():
             ["⭐ OWN"] if own else []
         ) + [
             GROUP_FOREIGN,
+            GROUP_RUSSIA,
             "DIRECT"
         ]
     })
@@ -282,14 +304,14 @@ def generate_mihomo_config():
         "proxy-groups": groups,
         "rules": (
             [f"DOMAIN-SUFFIX,{d},🌐 FOREIGN" for d in vpn_domains]
-            + [f"DOMAIN-SUFFIX,{d},DIRECT" for d in direct_domains]
+            + [f"DOMAIN-SUFFIX,{d},🇷🇺 RUSSIA" for d in direct_domains]
             + [
                 f"IP-CIDR,{normalize_ip_rule(ip)},🌐 FOREIGN,no-resolve"
                 for ip in vpn_ips
                 if validate_ip_rule(ip)
             ]
             + [
-                f"IP-CIDR,{normalize_ip_rule(ip)},DIRECT,no-resolve"
+                f"IP-CIDR,{normalize_ip_rule(ip)},🇷🇺 RUSSIA,no-resolve"
                 for ip in direct_ips
                 if validate_ip_rule(ip)
             ]

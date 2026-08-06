@@ -132,7 +132,7 @@ def main():
         subscriptions.append({
             "name": url.split("/")[-1],
             "url": url,
-            "role": "foreign",
+            "role": "",
             "enabled": True
         })
 

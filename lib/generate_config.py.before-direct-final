@@ -21,6 +21,7 @@ GROUP_PROXY = "🚀 PROXY"
 GROUP_FOREIGN = "🌐 FOREIGN"
 GROUP_FOREIGN_AUTO = "🌐 FOREIGN-AUTO"
 
+GROUP_RUSSIA = "🇷🇺 RUSSIA"
 
 RULE_PRIVATE = "DIRECT"
 
@@ -250,6 +251,17 @@ def generate_mihomo_config():
     })
 
 
+    russia_proxies = (
+        ru_names
+        if ru_names
+        else ["DIRECT"]
+    )
+
+    groups.append({
+        "name": GROUP_RUSSIA,
+        "type": "select",
+        "proxies": russia_proxies
+    })
 
 
     if own_names:
@@ -267,6 +279,7 @@ def generate_mihomo_config():
             ["⭐ OWN"] if own else []
         ) + [
             GROUP_FOREIGN,
+            GROUP_RUSSIA,
             "DIRECT"
         ]
     })
@@ -282,14 +295,14 @@ def generate_mihomo_config():
         "proxy-groups": groups,
         "rules": (
             [f"DOMAIN-SUFFIX,{d},🌐 FOREIGN" for d in vpn_domains]
-            + [f"DOMAIN-SUFFIX,{d},DIRECT" for d in direct_domains]
+            + [f"DOMAIN-SUFFIX,{d},🇷🇺 RUSSIA" for d in direct_domains]
             + [
                 f"IP-CIDR,{normalize_ip_rule(ip)},🌐 FOREIGN,no-resolve"
                 for ip in vpn_ips
                 if validate_ip_rule(ip)
             ]
             + [
-                f"IP-CIDR,{normalize_ip_rule(ip)},DIRECT,no-resolve"
+                f"IP-CIDR,{normalize_ip_rule(ip)},🇷🇺 RUSSIA,no-resolve"
                 for ip in direct_ips
                 if validate_ip_rule(ip)
             ]

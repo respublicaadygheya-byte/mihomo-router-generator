@@ -6,6 +6,22 @@ import yaml
 from pathlib import Path
 
 
+used_names = set()
+
+
+def unique_name(name):
+    original = name
+    counter = 2
+
+    while name in used_names:
+        name = f"{original}-{counter}"
+        counter += 1
+
+    used_names.add(name)
+    return name
+
+
+
 def load_list(filepath):
     """Загружает список доменов/IP из файла"""
     if not filepath or not Path(filepath).exists():
@@ -64,7 +80,7 @@ def generate_config(ru_proxies, foreign_proxies, ru_domains, ru_ips):
     #
     for p in ru_proxies:
         p = clean_proxy(p)
-        p['name'] = f"RU-{p['name']}"
+        p['name'] = unique_name(f"RU-{p['name']}")
         proxies.append(p)
 
     #
@@ -74,7 +90,7 @@ def generate_config(ru_proxies, foreign_proxies, ru_domains, ru_ips):
 
     for p in foreign_proxies:
         p = clean_proxy(p)
-        p['name'] = f"FOREIGN-{p['name']}"
+        p['name'] = unique_name(f"FOREIGN-{p['name']}")
         foreign_names.append(p['name'])
         proxies.append(p)
 

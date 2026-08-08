@@ -1,12 +1,15 @@
 #!/bin/bash
 
-# Переходим в директорию генератора
+# Подгружаем системные пути, чтобы cron видел go и git
+export PATH=$PATH:/usr/local/go/bin:/usr/bin:/bin
+
+# Переходим в директорию
 cd /root/mihomo-router-generator || exit 1
 
-# 1. Запуск твоей команды генерации/обновления (замени main.go или нужный флаг при необходимости)
-go run main.go
+# Запускаем родной скрипт обновления
+./update.sh
 
-# 2. Проверка изменений и отправка на GitHub
+# Проверяем изменения и отправляем на GitHub
 if [ -n "$(git status --porcelain)" ]; then
     git add .
     git commit -m "Auto-update config: $(date '+%Y-%m-%d %H:%M:%S')"

@@ -9,9 +9,62 @@ from pathlib import Path
 used_names = set()
 
 
+def sanitize_name(name):
+    import re
+    import unicodedata
+
+    name = str(name)
+
+    # Сохраняем Unicode, включая флаги стран.
+    # Убираем только управляющие символы и явно проблемные YAML/OpenClash
+    # разделители. Не пытаемся фильтровать Unicode через ASCII regex.
+
+    cleaned = []
+
+    for ch in name:
+        category = unicodedata.category(ch)
+
+        # Управляющие и невидимые форматирующие символы.
+        if category in {"Cc", "Cf"}:
+            cleaned.append(" ")
+            continue
+
+        # Проблемные символы для имени прокси.
+        if ch in "|,*()[]":
+            cleaned.append(" ")
+            continue
+
+        cleaned.append(ch)
+
+    name = "".join(cleaned)
+
+    # Нормализуем whitespace.
+    name = re.sub(r"\s+", " ", name).strip()
+
+    # Убираем повторные дефисы.
+    name = re.sub(r"-+", "-", name)
+
+    # Убираем пробелы/дефисы по краям.
+    name = name.strip(" -")
+
+    # Ограничение длины.
+    name = name[:60].strip(" -")
+
+    return name
+
+
 def unique_name(name):
     original = name
     counter = 2
+
+    reserved = {
+        'FOREIGN',
+        'PROXY',
+        'DIRECT'
+    }
+
+    if name in reserved:
+        name = f"{name}-node"
 
     while name in used_names:
         name = f"{original}-{counter}"
@@ -36,69 +89,38 @@ def load_list(filepath):
 
 
 def clean_proxy(proxy):
-    """Очищает прокси от мусора и нормализует поля"""
-
-    proxy.pop('alive', None)
-    proxy.pop('_id', None)
-
-    network = proxy.get('network', 'tcp')
-
-    if network in ['xhttp', 'http', 'raw']:
-        network = 'tcp'
-
-    proxy['network'] = network
-
-    if 'flow' in proxy and not proxy['flow']:
-        del proxy['flow']
-
-    if 'ws-opts' in proxy:
-        ws_opts = proxy['ws-opts']
-
-        if isinstance(ws_opts, dict):
-            if not (
-                'headers' in ws_opts
-                and isinstance(ws_opts['headers'], dict)
-            ):
-                ws_opts['headers'] = {
-                    'Host': ws_opts.get(
-                        'host',
-                        proxy.get('server', '')
-                    )
-                }
-
+    """Удаляет только внутренние служебные поля."""
+    proxy.pop("alive", None)
+    proxy.pop("_id", None)
     return proxy
 
 
 def generate_config(ru_proxies, foreign_proxies, ru_domains, ru_ips):
-    """Генерация Mihomo конфига"""
+    """Генерация простой целевой Mihomo-схемы."""
 
     proxies = []
-
-    #
-    # Российские прокси сохраняем,
-    # но НЕ используем как DIRECT.
-    #
-    for p in ru_proxies:
-        p = clean_proxy(p)
-        p['name'] = unique_name(f"RU-{p['name']}")
-        proxies.append(p)
-
-    #
-    # Иностранные прокси идут в FOREIGN
-    #
     foreign_names = []
 
-    for p in foreign_proxies:
+    # ВСЕ VPN-ноды идут в FOREIGN.
+    # RU/FOREIGN — только классификация на этапе splitter,
+    # но в итоговом YAML все ноды являются VPN-нodes.
+    all_proxies = list(ru_proxies) + list(foreign_proxies)
+
+    for p in all_proxies:
         p = clean_proxy(p)
-        p['name'] = unique_name(f"FOREIGN-{p['name']}")
+
+        original_name = p.get('name', 'PROXY')
+        p['name'] = unique_name(sanitize_name(original_name))
+
         foreign_names.append(p['name'])
         proxies.append(p)
 
+    # --------------------------------------------------------
+    # DIRECT: только RU domains/IP.
+    # --------------------------------------------------------
+
     rules = []
 
-    #
-    # Российские домены -> настоящий DIRECT
-    #
     for domain in ru_domains:
         domain = domain.strip().lower()
 
@@ -107,9 +129,6 @@ def generate_config(ru_proxies, foreign_proxies, ru_domains, ru_ips):
                 f"DOMAIN-SUFFIX,{domain},DIRECT"
             )
 
-    #
-    # Российские IP -> настоящий DIRECT
-    #
     for ip in ru_ips:
         ip = ip.strip()
 
@@ -118,11 +137,21 @@ def generate_config(ru_proxies, foreign_proxies, ru_domains, ru_ips):
                 f"IP-CIDR,{ip},DIRECT,no-resolve"
             )
 
-    #
-    # Остальное через PROXY
-    #
-    rules.append("MATCH,🚀 PROXY")
+    # Всё остальное -> PROXY
+    rules.append("MATCH,PROXY")
 
+    # --------------------------------------------------------
+    # Целевая схема:
+    #
+    # PROXY
+    #   ├── FOREIGN
+    #   ├── node1
+    #   ├── node2
+    #   └── ...
+    #
+    # FOREIGN
+    #   └── url-test -> все VPN-ноды
+    # --------------------------------------------------------
 
     config = {
         'mixed-port': 7890,
@@ -135,20 +164,20 @@ def generate_config(ru_proxies, foreign_proxies, ru_domains, ru_ips):
         'proxies': proxies,
 
         'proxy-groups': [
-
             {
-                'name': '🌐 FOREIGN',
-                'type': 'select',
-                'proxies': foreign_names + ['DIRECT']
-            },
-
-            {
-                'name': '🚀 PROXY',
+                'name': 'PROXY',
                 'type': 'select',
                 'proxies': [
-                    '🌐 FOREIGN',
-                    'DIRECT'
-                ]
+                    'FOREIGN'
+                ] + foreign_names
+            },
+            {
+                'name': 'FOREIGN',
+                'type': 'url-test',
+                'url': 'http://www.gstatic.com/generate_204',
+                'interval': 300,
+                'tolerance': 100,
+                'proxies': foreign_names
             }
         ],
 

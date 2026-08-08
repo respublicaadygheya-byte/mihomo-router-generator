@@ -1,141 +1,187 @@
 #!/usr/bin/env python3
-import re
+
 import json
+import re
 import sys
-import base64
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import unquote
+
+
+def parse_query(query):
+    params = {}
+
+    for item in query.split("&"):
+        if "=" not in item:
+            continue
+
+        key, value = item.split("=", 1)
+        params[key] = unquote(value)
+
+    return params
+
 
 def parse_vless(link):
-    """Парсит VLESS ссылку"""
-    if not link.startswith('vless://'):
-        return None
-    
-    # Очищаем ссылку от мусора
     link = link.strip()
-    
-    # Разбиваем по #
-    parts = link.split('#', 1)
-    name = parts[1] if len(parts) > 1 else "Unknown"
-    
-    # Убираем vless://
-    data = parts[0][8:]
-    
-    # Находим @
-    at_pos = data.find('@')
-    if at_pos == -1:
+
+    if not link.startswith("vless://"):
         return None
-    
-    uuid = data[:at_pos]
-    rest = data[at_pos+1:]
-    
-    # Находим порт (после последнего :)
-    colon_pos = rest.rfind(':')
-    if colon_pos == -1:
-        return None
-    
-    server = rest[:colon_pos]
-    port_and_params = rest[colon_pos+1:]
-    
-    # Отделяем порт от параметров
-    if '?' in port_and_params:
-        port_str, params = port_and_params.split('?', 1)
-    else:
-        port_str, params = port_and_params, ''
-    
-    # Очищаем порт от слешей и мусора
-    port_str = re.sub(r'[^0-9]', '', port_str)
-    if not port_str:
-        return None
-    
-    port = int(port_str)
-    
-    # Парсим параметры
-    params_dict = {}
-    if params:
-        for param in params.split('&'):
-            if '=' in param:
-                k, v = param.split('=', 1)
-                params_dict[k] = unquote(v)
-    
-    # Декодируем имя
+
     try:
-        # Пробуем base64 decode
-        name_decoded = base64.urlsafe_b64decode(name + '==').decode('utf-8')
-    except:
-        try:
-            # Пробуем URL decode
-            name_decoded = unquote(name)
-        except:
-            name_decoded = name
-    
-    # Формируем прокси
-    proxy = {
-        'name': name_decoded,
-        'type': 'vless',
-        'server': server,
-        'port': port,
-        'uuid': uuid,
-        'network': params_dict.get('type', 'tcp'),
-        'encryption': params_dict.get('encryption', 'none'),
-        'flow': params_dict.get('flow', '')
-    }
-    
-    # Добавляем tls если есть
-    if params_dict.get('security') == 'tls':
-        proxy['tls'] = True
-        proxy['sni'] = params_dict.get('sni', server)
-    
-    # Добавляем WS настройки если нужно
-    if params_dict.get('type') == 'ws':
-        proxy['ws-opts'] = {
-            'path': params_dict.get('path', '/'),
-            'headers': {'Host': params_dict.get('host', server)}
+        body = link[len("vless://"):]
+
+        if "#" in body:
+            body, name = body.split("#", 1)
+            name = unquote(name)
+        else:
+            name = "Unknown"
+
+        if "?" not in body:
+            return None
+
+        user_host, query = body.split("?", 1)
+
+        if "@" not in user_host:
+            return None
+
+        uuid, server_port = user_host.rsplit("@", 1)
+
+        if ":" not in server_port:
+            return None
+
+        server, port = server_port.rsplit(":", 1)
+
+        proxy = {
+            "name": name,
+            "type": "vless",
+            "server": server,
+            "port": int(port),
+            "uuid": uuid,
         }
-    
-    return proxy
+
+        params = parse_query(query)
+
+        if "type" in params:
+            proxy["network"] = params["type"]
+
+        if "encryption" in params:
+            proxy["encryption"] = params["encryption"]
+
+        if "flow" in params:
+            proxy["flow"] = params["flow"]
+
+        security = params.get("security")
+
+        if security == "reality":
+            public_key = params.get("pbk")
+
+            if not public_key:
+                return None
+
+            proxy["tls"] = True
+
+            reality_opts = {
+                "public-key": public_key,
+            }
+
+            if "sid" in params and params["sid"] != "":
+                reality_opts["short-id"] = params["sid"]
+
+            proxy["reality-opts"] = reality_opts
+
+            if "sni" in params and params["sni"] != "":
+                proxy["servername"] = params["sni"]
+
+            if "fp" in params and params["fp"] != "":
+                proxy["client-fingerprint"] = params["fp"]
+
+        elif security == "tls":
+            proxy["tls"] = True
+
+            if "sni" in params and params["sni"] != "":
+                proxy["servername"] = params["sni"]
+
+            if "fp" in params and params["fp"] != "":
+                proxy["client-fingerprint"] = params["fp"]
+
+        if params.get("type") == "ws":
+            ws_opts = {}
+
+            if "path" in params:
+                ws_opts["path"] = params["path"]
+
+            if "host" in params:
+                ws_opts["headers"] = {
+                    "Host": params["host"]
+                }
+
+            if ws_opts:
+                proxy["ws-opts"] = ws_opts
+
+        return proxy
+
+    except (ValueError, TypeError):
+        return None
+
 
 def main():
-    if len(sys.argv) < 3:
+    if len(sys.argv) != 3:
         print("Usage: parser.py <input_file> <output_file>")
         sys.exit(1)
-    
+
     input_file = sys.argv[1]
     output_file = sys.argv[2]
-    
+
+    with open(
+        input_file,
+        "r",
+        encoding="utf-8",
+        errors="ignore",
+    ) as f:
+        content = f.read()
+
+    pattern = r'vless://[^\s<>"\'{}|\\`\[\]]+'
+    links = re.findall(pattern, content)
+
     proxies = []
-    try:
-        with open(input_file, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-            
-        # Ищем все vless:// ссылки
-        vless_pattern = r'vless://[^\s<>"\'{}|\\^`\[\]]+'
-        matches = re.findall(vless_pattern, content)
-        
-        for link in matches:
-            proxy = parse_vless(link)
-            if proxy:
-                proxies.append(proxy)
-                
-    except FileNotFoundError:
-        print(f"Error: Input file {input_file} not found")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error parsing: {e}")
-        sys.exit(1)
-    
-    # Удаляем дубликаты
+
+    for link in links:
+        proxy = parse_vless(link)
+
+        if proxy:
+            proxies.append(proxy)
+
+    # Дубликат = полная конфигурация подключения,
+    # а не только server/port/uuid.
     seen = set()
     unique = []
-    for p in proxies:
-        key = (p['server'], p['port'], p['uuid'])
-        if key not in seen:
-            seen.add(key)
-            unique.append(p)
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(unique, f, indent=2, ensure_ascii=False)
-    
+
+    for proxy in proxies:
+        key = json.dumps(
+            proxy,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique.append(proxy)
+
+    with open(
+        output_file,
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            unique,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
     print(f"Импортировано: {len(unique)} уникальных прокси")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

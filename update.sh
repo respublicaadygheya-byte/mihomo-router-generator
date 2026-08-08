@@ -19,6 +19,7 @@ SOURCES=(
     "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt"
     "https://raw.githubusercontent.com/aviamastersgh/vpn-free-russia/main/verified_configs.txt"
     "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/WHITE-CIDR-RU-all.txt"
+    "https://github.com/AvenCores/goida-vpn-configs/raw/refs/heads/main/githubmirror/26.txt"
 )
 
 # Собираем все прокси в один файл
@@ -70,6 +71,19 @@ python3 src/generator.py \
     --ru-direct domains:lists/ru_direct_domains.txt \
     --ru-direct ips:lists/ru_direct_ips.txt \
     --output publish/mihomo.yaml
+
+# ============================================
+# ШАГ 5: Финальная валидация через Mihomo
+# ============================================
+echo "[5/5] Validate generated config with Mihomo"
+
+python3 src/filter_mihomo.py \
+    publish/mihomo.yaml \
+    publish/mihomo-filtered.yaml
+
+# Финальный конфиг после отбрасывания
+# прокси, которые Mihomo не принимает.
+mv publish/mihomo-filtered.yaml publish/mihomo.yaml
 
 # Копируем для OpenClash
 cp publish/mihomo.yaml publish/openclash.yaml

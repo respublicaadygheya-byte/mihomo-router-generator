@@ -122,6 +122,69 @@ def parse_vless(link):
         return None
 
 
+
+def parse_hysteria2(link):
+    link = link.strip()
+
+    if link.startswith("hysteria2://"):
+        prefix = "hysteria2://"
+    elif link.startswith("hy2://"):
+        prefix = "hy2://"
+    else:
+        return None
+
+    try:
+        body = link[len(prefix):]
+
+        if "#" in body:
+            body, name = body.split("#", 1)
+            name = unquote(name)
+        else:
+            name = "Unknown-Hy2"
+
+        query = ""
+
+        if "?" in body:
+            body, query = body.split("?", 1)
+
+        if "@" not in body:
+            return None
+
+        password, server_port = body.rsplit("@", 1)
+
+        if ":" not in server_port:
+            return None
+
+        server, port = server_port.rsplit(":", 1)
+
+        proxy = {
+            "name": name,
+            "type": "hysteria2",
+            "server": server,
+            "port": int(port),
+            "password": unquote(password),
+        }
+
+        params = parse_query(query) if query else {}
+
+        if params.get("sni"):
+            proxy["sni"] = params["sni"]
+
+        if params.get("insecure") in ("1", "true"):
+            proxy["skip-cert-verify"] = True
+
+        if params.get("obfs") and params["obfs"] != "none":
+            proxy["obfs"] = params["obfs"]
+
+        if params.get("obfs-password"):
+            proxy["obfs-password"] = params["obfs-password"]
+
+        return proxy
+
+    except (ValueError, TypeError):
+        return None
+
+
 def main():
     if len(sys.argv) != 3:
         print("Usage: parser.py <input_file> <output_file>")
@@ -138,13 +201,18 @@ def main():
     ) as f:
         content = f.read()
 
-    pattern = r'vless://[^\s<>"\'{}|\\`\[\]]+'
+    pattern = r'(?:vless|hysteria2|hy2)://[^\s<>"\'{}|\\`\[\]]+'
     links = re.findall(pattern, content)
 
     proxies = []
 
     for link in links:
-        proxy = parse_vless(link)
+        if link.startswith("vless://"):
+            proxy = parse_vless(link)
+        elif link.startswith(("hysteria2://", "hy2://")):
+            proxy = parse_hysteria2(link)
+        else:
+            proxy = None
 
         if proxy:
             proxies.append(proxy)

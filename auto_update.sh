@@ -1,17 +1,34 @@
 #!/bin/bash
+set -e
 
-# Подгружаем системные пути, чтобы cron видел go и git
-export PATH=$PATH:/usr/local/go/bin:/usr/bin:/bin
+export PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
 
-# Переходим в директорию
-cd /root/mihomo-router-generator || exit 1
+cd /root/mihomo-router-generator
 
-# Запускаем родной скрипт обновления
+echo "========================================"
+echo "MIHOMO AUTO UPDATE"
+echo "========================================"
+echo "Started: $(date)"
+
 ./update.sh
 
-# Проверяем изменения и отправляем на GitHub
-if [ -n "$(git status --porcelain)" ]; then
-    git add .
-    git commit -m "Auto-update config: $(date '+%Y-%m-%d %H:%M:%S')"
+echo
+echo "Checking generated YAML..."
+
+test -s publish/mihomo.yaml
+test -s publish/openclash.yaml
+
+echo "YAML files OK"
+
+git add -f publish/mihomo.yaml publish/openclash.yaml
+
+if git diff --cached --quiet; then
+    echo "No changes to publish."
+else
+    git commit -m "Auto-update Mihomo configs: $(date '+%Y-%m-%d %H:%M:%S')"
     git push origin main
+    echo "GitHub push completed."
 fi
+
+echo "Finished: $(date)"
+echo "========================================"

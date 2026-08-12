@@ -16,10 +16,7 @@ rm -rf cache/filtered/*
 
 # Скачиваем источники
 SOURCES=(
-    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt"
-    "https://raw.githubusercontent.com/aviamastersgh/vpn-free-russia/main/verified_configs.txt"
-    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/WHITE-CIDR-RU-all.txt"
-    "https://github.com/AvenCores/goida-vpn-configs/raw/refs/heads/main/githubmirror/26.txt"
+    "https://raw.githubusercontent.com/luxxuria/harvester/refs/heads/main/top_600.txt"
 )
 
 # Собираем все прокси в один файл
